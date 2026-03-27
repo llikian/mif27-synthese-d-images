@@ -148,9 +148,9 @@ Transform Camera::get_inverse_view_projection_matrix() const {
 void Camera::set_position(const vec3& position) {
     this->position = position;
 
-    view_matrix.m[0][3] = -dot(position, right);
-    view_matrix.m[1][3] = -dot(position, up);
-    view_matrix.m[2][3] = dot(position, direction);
+    view_matrix.m[0][3] = dot(position, right);
+    view_matrix.m[1][3] = dot(position, up);
+    view_matrix.m[2][3] = -dot(position, direction);
 }
 
 void Camera::look_around(float pitch_offset, float yaw_offset) {
@@ -174,9 +174,9 @@ void Camera::move_around(MovementDirection movement_direction, float delta) {
         default:                          break;
     }
 
-    view_matrix.m[0][3] = -dot(position, right);
-    view_matrix.m[1][3] = -dot(position, up);
-    view_matrix.m[2][3] = dot(position, direction);
+    view_matrix.m[0][3] = dot(position, right);
+    view_matrix.m[1][3] = dot(position, up);
+    view_matrix.m[2][3] = -dot(position, direction);
 }
 
 void Camera::update_projection_matrix() {
@@ -199,18 +199,7 @@ void Camera::update_vectors_and_view_matrix() {
     right = normalize(cross(direction, WORLD_UP));
     up = normalize(cross(right, direction));
 
-    view_matrix.m[0][0] = right.x;
-    view_matrix.m[0][1] = right.y;
-    view_matrix.m[0][2] = right.z;
-    view_matrix.m[0][3] = -dot(position, right);
-
-    view_matrix.m[1][0] = up.x;
-    view_matrix.m[1][1] = up.y;
-    view_matrix.m[1][2] = up.z;
-    view_matrix.m[1][3] = -dot(position, up);
-
-    view_matrix.m[2][0] = -direction.x;
-    view_matrix.m[2][1] = -direction.y;
-    view_matrix.m[2][2] = -direction.z;
-    view_matrix.m[2][3] = dot(position, direction);
+    view_matrix.row(0, right.x, right.y, right.z, dot(position, right));
+    view_matrix.row(1, up.x, up.y, up.z, dot(position, up));
+    view_matrix.row(2, -direction.x, -direction.y, -direction.z, -dot(position, direction));
 }

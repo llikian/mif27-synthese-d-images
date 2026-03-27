@@ -6,6 +6,7 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Sparse>
 #include <iostream>
+#include <print>
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
@@ -63,7 +64,8 @@ int main() {
             throw std::runtime_error("Couldn't read mesh");
         };
         unsigned int vao = create_buffers(data.positions, data.indices, data.positions, data.normals);
-        unsigned int texture = read_texture(0, "data/assets/tomato.png");
+        // unsigned int texture = read_texture(0, "data/assets/tomato.png");
+        unsigned int texture = read_texture(0, "data/assets/blender_checker.png");
         default_texture(0, texture);
 
         // etat openGL de base / par defaut
@@ -90,7 +92,7 @@ int main() {
         {
             std::size_t num = 0;
             for(unsigned int index : seam) {
-                float angle = 2.0f * PIf * num / seam.size();
+                float angle = (2.0f * PIf * num) / seam.size();
                 tex_coords[index] = Point(std::cos(angle), std::sin(angle), 0.0f);
                 num++;
             }
@@ -107,13 +109,6 @@ int main() {
             neighbours[index1].insert(index2);
             neighbours[index2].insert(index0);
             neighbours[index2].insert(index1);
-        }
-
-        unsigned int num = 0;
-        for(const std::set<unsigned int>& neigh : neighbours) {
-            std::cout << num++ << ": ";
-            for(unsigned int index : neigh) { std::cout << index << ' '; }
-            std::cout << '\n';
         }
 
         std::unordered_map<unsigned int, unsigned int> row_indices;
@@ -134,15 +129,14 @@ int main() {
         rhs_v.setZero();
 
         for(const auto& [vertex_index, row_index] : row_indices) {
-            coefficients.emplace_back(row_index, row_index, 1.0f);
+            coefficients.emplace_back(row_index, row_index, -static_cast<float>(neighbours[vertex_index].size()));
 
-            float coefficient = 1.0f / neighbours[vertex_index].size();
             for(unsigned int neighbour_index : neighbours[vertex_index]) {
                 if(seam_set.contains(neighbour_index)) {
-                    rhs_u[row_index] += coefficient * tex_coords[neighbour_index].x;
-                    rhs_v[row_index] += coefficient * tex_coords[neighbour_index].y;
+                    rhs_u[row_index] -= tex_coords[neighbour_index].x;
+                    rhs_v[row_index] -= tex_coords[neighbour_index].y;
                 } else {
-                    coefficients.emplace_back(row_index, row_indices[neighbour_index], -coefficient);
+                    coefficients.emplace_back(row_index, row_indices[neighbour_index], 1.0f);
                 }
             }
         }
@@ -150,9 +144,9 @@ int main() {
         Eigen::SparseMatrix<float> matrix(interior_count, interior_count);
         matrix.setFromTriplets(coefficients.begin(), coefficients.end());
         Eigen::ConjugateGradient<Eigen::SparseMatrix<float>> solver;
-        solver.compute(matrix);
         Eigen::VectorXf solution_u(interior_count);
         Eigen::VectorXf solution_v(interior_count);
+        solver.compute(matrix);
         solution_u = solver.solve(rhs_u);
         solution_v = solver.solve(rhs_v);
 
@@ -160,8 +154,7 @@ int main() {
             tex_coords[vertex_index] = Point(solution_u[row_index], solution_v[row_index], 0.0f);
         }
 
-        // unsigned int vao_tex = create_buffers(data.positions, data.indices, tex_coords, data.normals);
-        // unsigned int vao_tex = create_buffers(data.positions, data.indices, tex_coords_normalized, data.normals);
+        unsigned int vao_with_texcoords = create_buffers(data.positions, data.indices, tex_coords, data.normals);
         unsigned int vao_tex = create_buffers(tex_coords, data.indices);
 
         const SDL_Keycode KEYS[] {
@@ -169,6 +162,8 @@ int main() {
         };
         std::unordered_map<SDL_Keycode, bool> repeatable_keys;
         for(SDL_Keycode key : KEYS) { repeatable_keys[key] = false; }
+
+        bool wireframe = false;
 
         // main loop
         bool should_stop = false;
@@ -187,7 +182,17 @@ int main() {
 
                     switch(event.key.keysym.sym) {
                         case SDLK_ESCAPE: should_stop = true; break;
-                        default:          break;
+                        case SDLK_w:
+                            if(wireframe) {
+                                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+                            } else {
+
+                                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                            }
+                            wireframe = !wireframe;
+                            break;
+                        default: break;
                     }
                 } else if(event.type == SDL_KEYUP) {
 
@@ -198,6 +203,7 @@ int main() {
             }
 
             for(const auto& [key, is_key_down] : repeatable_keys) {
+                constexpr float view_speed = 10.0f;
                 if(is_key_down) {
                     switch(key) {
                         case SDLK_z:     camera.move_around(MovementDirection::FORWARD, delta); break;
@@ -206,31 +212,32 @@ int main() {
                         case SDLK_d:     camera.move_around(MovementDirection::RIGHT, delta); break;
                         case SDLK_SPACE: camera.move_around(MovementDirection::UPWARD, delta); break;
                         case SDLK_c:     camera.move_around(MovementDirection::DOWNWARD, delta); break;
-                        case SDLK_LEFT:  camera.look_around(0.0f, -500.0f); break;
-                        case SDLK_RIGHT: camera.look_around(0.0f, 500.0f); break;
-                        case SDLK_DOWN:  camera.look_around(-500.0f, 0.0f); break;
-                        case SDLK_UP:    camera.look_around(500.0f, 0.0f); break;
+                        case SDLK_LEFT:  camera.look_around(0.0f, -view_speed); break;
+                        case SDLK_RIGHT: camera.look_around(0.0f, view_speed); break;
+                        case SDLK_DOWN:  camera.look_around(view_speed, 0.0f); break;
+                        case SDLK_UP:    camera.look_around(-view_speed, 0.0f); break;
                         default:         break;
                     }
                 }
             }
 
-            vec3 pos = camera.get_position();
+            Transform view = camera.get_view_matrix();
 
             // draw(vao,
             //      GL_TRIANGLES,
             //      data.indices.size(),
             //      model,
-            //      RotationY(camera.get_yaw()) * Translation(pos.x, pos.y, pos.z),
-            //      // camera.get_view_matrix(),
+            //      view,
             //      camera.get_projection_matrix());
 
-            draw(vao_tex,
-                 GL_LINES,
-                 data.indices.size(),
-                 model,
-                 RotationY(camera.get_yaw()) * Translation(pos.x, pos.y, pos.z),
-                 camera.get_projection_matrix());
+            draw(vao_with_texcoords, GL_TRIANGLES, data.indices.size(), model, view, camera.get_projection_matrix());
+
+            // draw(vao_tex,
+            //      GL_TRIANGLES,
+            //      data.indices.size(),
+            //      model,
+            //      view,
+            //      camera.get_projection_matrix());
 
             SDL_GL_SwapWindow(window);
         }
