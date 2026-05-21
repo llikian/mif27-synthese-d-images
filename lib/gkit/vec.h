@@ -177,13 +177,14 @@ struct vec3 {
 vec3 operator*(float scalar, const vec3& v);
 
 vec3 operator-(const vec3& u, const vec3& v);
+vec3 operator+(const vec3& u, const vec3& v);
 
 inline float dot(const vec3& u, const vec3& v) {
     return u.x * v.x + u.y * v.y + u.z * v.z;
 }
 
 inline vec3 normalize(const vec3& v) {
-    return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z) * v;
+    return (1.0f / std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z)) * v;
 }
 
 inline vec3 cross(const vec3& u, const vec3& v) {

@@ -29,9 +29,9 @@ set(SOURCES
     # Classes
     src/Camera.cpp
 
-
     # Other Sources
-
+    src/tutte.cpp
+    src/least_squares.cpp
 
     # Libraries
     ${LIBRARY_SOURCES}

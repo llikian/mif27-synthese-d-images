@@ -10,8 +10,6 @@
 
 enum class MovementDirection : unsigned char { FORWARD, BACKWARD, LEFT, RIGHT, UPWARD, DOWNWARD };
 
-#define PIf (std::numbers::pi_v<float>)
-
 /**
  * @class Camera
  * @brief Represents a first person that allows to fly and look around the 3D space.
@@ -28,6 +26,7 @@ public:
      * @param far_distance Distance of the far plane.
      */
     Camera(const vec3& position, float fov, float aspect_ratio, float near_distance, float far_distance);
+
     /**
      * @return The camera's position.
      */
@@ -76,39 +75,6 @@ public:
      * @return A reference to the projection matrix.
      */
     const Transform& get_projection_matrix() const;
-
-    /**
-     * @brief Calculates the view-projection matrix.
-     * @return The projection matrix multiplied by the view matrix.
-     */
-    Transform get_view_projection_matrix() const;
-
-    /**
-     * @brief Calculates the camera's rotation matrix.
-     * @return A rotation matrix that rotates towards where the camera is looking.
-     */
-    Transform get_rotation_matrix() const;
-
-    /**
-     * @brief Calculates the camera's model matrix. This matrix is also the inverse of the camera's
-     * view matrix.
-     * @return A transformation matrix that rotates towards where the camera is looking and translates
-     * it to the camera's position.
-     */
-    Transform get_model_matrix() const;
-
-    /**
-     * @brief Calculates the inverse of the projection matrix.
-     * @return The inverse of the projection matrix.
-     */
-    Transform get_inverse_projection_matrix() const;
-
-    /**
-     * @brief Calculates the inverse of the view-projectino matrix.
-     * @return The inverse of the view matrix multiplied with the inverse of the projection matrix:\n
-     * (PV)^(-1) = V^(-1) * P^(-1).
-     */
-    Transform get_inverse_view_projection_matrix() const;
 
     /**
      * @brief Sets the camera's position to a certain point.

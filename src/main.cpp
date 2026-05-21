@@ -3,61 +3,30 @@
  * @brief Contains the main program of the project
  **************************************************************************************************/
 
-#include <eigen3/Eigen/Dense>
-#include <eigen3/Eigen/Sparse>
 #include <iostream>
 #include <print>
-#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include "buffers.h"
 #include "Camera.hpp"
+#include "constants.hpp"
 #include "draw.h"
 #include "glcore.h"
+#include "least_squares.hpp"
 #include "mesh_io.h"
 #include "texture.h"
+#include "tutte.hpp"
 #include "window.h"
-
-using Edge = std::pair<unsigned int, unsigned int>;
-
-std::vector<unsigned int> find_seam(const std::vector<unsigned int>& indices) {
-    std::set<Edge> edges;
-
-    auto emplace_edge = [&](unsigned int A, unsigned int B) {
-        auto ite = edges.find(Edge(B, A));
-        if(ite == edges.end()) {
-            edges.emplace(A, B);
-        } else {
-            edges.erase(ite);
-        }
-    };
-
-    for(std::size_t i = 0; i + 2 < indices.size(); i += 3) {
-        emplace_edge(indices[i], indices[i + 1]);
-        emplace_edge(indices[i + 1], indices[i + 2]);
-        emplace_edge(indices[i + 2], indices[i]);
-    }
-
-    std::unordered_map<unsigned int, unsigned int> edges_map;
-    for(const Edge& edge : edges) { edges_map[edge.first] = edge.second; }
-
-    std::vector<unsigned int> vertices;
-    unsigned int start = edges.begin()->first;
-    unsigned int index = start;
-    do {
-        vertices.push_back(index);
-        index = edges_map[index];
-    } while(index != start);
-
-    return vertices;
-}
 
 int main() {
     try {
-        Window window = create_window(1024, 576);
+        int width = 1024;
+        int height = 576;
+
+        Window window = create_window(width, height);
         Context context = create_context(window);
 
-        Camera camera(vec3(0.0f, -2.0f, -10.0f), PIf / 4.0f, 1024.0f / 576.0f, 0.1f, 1000.0f);
+        Camera camera(vec3(0.0f, -2.0f, -10.0f), PI_F / 4.0f, static_cast<float>(width) / height, 0.1f, 1000.0f);
 
         MeshIOData data;
         if(!read_meshio_data("data/assets/suzanne_uvsplit.obj", data)) {
@@ -69,93 +38,24 @@ int main() {
         default_texture(0, texture);
 
         // etat openGL de base / par defaut
-        glViewport(0, 0, 1024, 576);
+        glViewport(0, 0, width, height);
         glClearColor(71 / 255.0f, 142 / 255.0f, 95 / 255.0f, 1.0f);
         glClearDepth(1);
         glDepthFunc(GL_LESS);
         glEnable(GL_DEPTH_TEST);
 
-        Transform model;
+        Transform model = Identity();
 
         float time = 0.0f;
         float delta = 0.0f;
 
-        std::vector<unsigned int> seam = find_seam(data.indices);
-        std::set<unsigned int> seam_set(seam.begin(), seam.end());
+        std::vector<Point> tutte_uvs = tutte_uv_unwrapping(data);
+        unsigned int vao_tutte = create_buffers(data.positions, data.indices, tutte_uvs, data.normals);
+        unsigned int vao_tutte_as_tex = create_buffers(tutte_uvs, data.indices);
 
-        std::cout << "\n\n";
-        std::cout << "Seam vertices count: " << seam.size() << '\n';
-        std::cout << "\n\n";
-
-        std::size_t vertex_count = data.positions.size();
-        std::vector<Point> tex_coords(vertex_count);
-        {
-            std::size_t num = 0;
-            for(unsigned int index : seam) {
-                float angle = (2.0f * PIf * num) / seam.size();
-                tex_coords[index] = Point(std::cos(angle), std::sin(angle), 0.0f);
-                num++;
-            }
-        }
-
-        std::vector<std::set<unsigned int>> neighbours(vertex_count);
-        for(std::size_t i = 0; i + 2 < data.indices.size(); i += 3) {
-            unsigned int index0 = data.indices[i];
-            unsigned int index1 = data.indices[i + 1];
-            unsigned int index2 = data.indices[i + 2];
-            neighbours[index0].insert(index1);
-            neighbours[index0].insert(index2);
-            neighbours[index1].insert(index0);
-            neighbours[index1].insert(index2);
-            neighbours[index2].insert(index0);
-            neighbours[index2].insert(index1);
-        }
-
-        std::unordered_map<unsigned int, unsigned int> row_indices;
-        unsigned int row = 0;
-        for(std::size_t i = 0; i < vertex_count; ++i) {
-            if(!seam_set.contains(i)) {
-                row_indices[i] = row;
-                row++;
-            }
-        }
-        unsigned int interior_count = row_indices.size();
-        std::cout << "Interior: " << interior_count << '\n';
-
-        std::vector<Eigen::Triplet<float>> coefficients;
-        Eigen::VectorXf rhs_u(interior_count);
-        Eigen::VectorXf rhs_v(interior_count);
-        rhs_u.setZero();
-        rhs_v.setZero();
-
-        for(const auto& [vertex_index, row_index] : row_indices) {
-            coefficients.emplace_back(row_index, row_index, -static_cast<float>(neighbours[vertex_index].size()));
-
-            for(unsigned int neighbour_index : neighbours[vertex_index]) {
-                if(seam_set.contains(neighbour_index)) {
-                    rhs_u[row_index] -= tex_coords[neighbour_index].x;
-                    rhs_v[row_index] -= tex_coords[neighbour_index].y;
-                } else {
-                    coefficients.emplace_back(row_index, row_indices[neighbour_index], 1.0f);
-                }
-            }
-        }
-
-        Eigen::SparseMatrix<float> matrix(interior_count, interior_count);
-        matrix.setFromTriplets(coefficients.begin(), coefficients.end());
-        Eigen::ConjugateGradient<Eigen::SparseMatrix<float>> solver;
-        Eigen::VectorXf solution_u(interior_count);
-        Eigen::VectorXf solution_v(interior_count);
-        solver.compute(matrix);
-        solution_u = solver.solve(rhs_u);
-        solution_v = solver.solve(rhs_v);
-
-        for(const auto& [vertex_index, row_index] : row_indices) {
-            tex_coords[vertex_index] = Point(solution_u[row_index], solution_v[row_index], 0.0f);
-        }
-
-        unsigned int vao_with_texcoords = create_buffers(data.positions, data.indices, tex_coords, data.normals);
-        unsigned int vao_tex = create_buffers(tex_coords, data.indices);
+        std::vector<Point> least_squares_uvs = least_squares_uv_unwrapping(data);
+        unsigned int vao_least_squares = create_buffers(data.positions, data.indices, least_squares_uvs, data.normals);
+        unsigned int vao_least_squares_as_tex = create_buffers(least_squares_uvs, data.indices);
 
         const SDL_Keycode KEYS[] {
             SDLK_z, SDLK_q, SDLK_s, SDLK_d, SDLK_SPACE, SDLK_c, SDLK_LEFT, SDLK_RIGHT, SDLK_DOWN, SDLK_UP,
@@ -164,6 +64,7 @@ int main() {
         for(SDL_Keycode key : KEYS) { repeatable_keys[key] = false; }
 
         bool wireframe = false;
+        int view_number = 3;
 
         // main loop
         bool should_stop = false;
@@ -184,15 +85,18 @@ int main() {
                         case SDLK_ESCAPE: should_stop = true; break;
                         case SDLK_w:
                             if(wireframe) {
-                                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-                            } else {
-
                                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                            } else {
+                                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                             }
                             wireframe = !wireframe;
                             break;
-                        default: break;
+                        case SDLK_0: view_number = 0; break;
+                        case SDLK_1: view_number = 1; break;
+                        case SDLK_2: view_number = 2; break;
+                        case SDLK_3: view_number = 3; break;
+                        case SDLK_4: view_number = 4; break;
+                        default:     break;
                     }
                 } else if(event.type == SDL_KEYUP) {
 
@@ -203,7 +107,7 @@ int main() {
             }
 
             for(const auto& [key, is_key_down] : repeatable_keys) {
-                constexpr float view_speed = 10.0f;
+                constexpr float view_speed = 0.2f;
                 if(is_key_down) {
                     switch(key) {
                         case SDLK_z:     camera.move_around(MovementDirection::FORWARD, delta); break;
@@ -214,30 +118,29 @@ int main() {
                         case SDLK_c:     camera.move_around(MovementDirection::DOWNWARD, delta); break;
                         case SDLK_LEFT:  camera.look_around(0.0f, -view_speed); break;
                         case SDLK_RIGHT: camera.look_around(0.0f, view_speed); break;
-                        case SDLK_DOWN:  camera.look_around(view_speed, 0.0f); break;
                         case SDLK_UP:    camera.look_around(-view_speed, 0.0f); break;
+                        case SDLK_DOWN:  camera.look_around(view_speed, 0.0f); break;
                         default:         break;
                     }
                 }
             }
 
             Transform view = camera.get_view_matrix();
+            Transform proj = camera.get_projection_matrix();
 
-            // draw(vao,
-            //      GL_TRIANGLES,
-            //      data.indices.size(),
-            //      model,
-            //      view,
-            //      camera.get_projection_matrix());
-
-            draw(vao_with_texcoords, GL_TRIANGLES, data.indices.size(), model, view, camera.get_projection_matrix());
-
-            // draw(vao_tex,
-            //      GL_TRIANGLES,
-            //      data.indices.size(),
-            //      model,
-            //      view,
-            //      camera.get_projection_matrix());
+            // 0 : Suzanne with default texcoords
+            // 1 : Tutte on Suzanne
+            // 2 : Tutte UVs
+            // 3 : Least Squares on Suzanne
+            // 4 : Least Squares UVs
+            switch(view_number) {
+                case 0:  draw(vao, GL_TRIANGLES, data.indices.size(), model, view, proj); break;
+                case 1:  draw(vao_tutte, GL_TRIANGLES, data.indices.size(), model, view, proj); break;
+                case 2:  draw(vao_tutte_as_tex, GL_TRIANGLES, data.indices.size(), model, view, proj); break;
+                case 3:  draw(vao_least_squares, GL_TRIANGLES, data.indices.size(), model, view, proj); break;
+                case 4:  draw(vao_least_squares_as_tex, GL_TRIANGLES, data.indices.size(), model, view, proj); break;
+                default: break;
+            }
 
             SDL_GL_SwapWindow(window);
         }

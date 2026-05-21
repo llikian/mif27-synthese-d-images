@@ -124,6 +124,10 @@ vec3 operator-(const vec3& u, const vec3& v) {
     return vec3(u.x - v.x, u.y - v.y, u.z - v.z);
 }
 
+vec3 operator+(const vec3& u, const vec3& v) {
+    return vec3(u.x + v.x, u.y + v.y, u.z + v.z);
+}
+
 Vector normalize(const Vector& v) {
     float kk = 1 / length(v);
     return kk * v;

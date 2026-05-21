@@ -6,7 +6,7 @@
 #include "Camera.hpp"
 
 #include <cmath>
-#include <numbers>
+#include "constants.hpp"
 
 static inline Transform perspective(float fov, float aspect, float near, float far) {
     return Transform(1.0f / (aspect * std::tan(0.5f * fov)),
@@ -32,7 +32,7 @@ Camera::Camera(const vec3& position, float fov, float aspect_ratio, float near_d
       movement_speed(5.0f),
       position(position),
       pitch(0.0f),
-      yaw(-PIf / 2.0f),
+      yaw(-PI_F / 2.0f),
       fov(fov),
       near_distance(near_distance),
       far_distance(far_distance),
@@ -77,74 +77,6 @@ const Transform& Camera::get_projection_matrix() const {
     return projection_matrix;
 }
 
-Transform Camera::get_view_projection_matrix() const {
-    return Transform(projection_matrix.m[0][0] * view_matrix.m[0][0],
-                     projection_matrix.m[0][0] * view_matrix.m[0][1],
-                     projection_matrix.m[0][0] * view_matrix.m[0][2],
-                     projection_matrix.m[0][0] * view_matrix.m[0][3],
-
-                     projection_matrix.m[1][1] * view_matrix.m[1][0],
-                     projection_matrix.m[1][1] * view_matrix.m[1][1],
-                     projection_matrix.m[1][1] * view_matrix.m[1][2],
-                     projection_matrix.m[1][1] * view_matrix.m[1][3],
-
-                     projection_matrix.m[2][2] * view_matrix.m[2][0],
-                     projection_matrix.m[2][2] * view_matrix.m[2][1],
-                     projection_matrix.m[2][2] * view_matrix.m[2][2],
-                     projection_matrix.m[2][2] * view_matrix.m[2][3] + projection_matrix.m[2][3],
-
-                     -view_matrix.m[2][0],
-                     -view_matrix.m[2][1],
-                     -view_matrix.m[2][2],
-                     -view_matrix.m[2][3]);
-}
-
-Transform Camera::get_rotation_matrix() const {
-    return Transform(right.x, up.x, -direction.x, right.y, up.y, -direction.y, right.z, up.z, -direction.z);
-}
-
-Transform Camera::get_model_matrix() const {
-    return Transform(right.x,
-                     up.x,
-                     -direction.x,
-                     position.x,
-                     right.y,
-                     up.y,
-                     -direction.y,
-                     position.y,
-                     right.z,
-                     up.z,
-                     -direction.z,
-                     position.z,
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     1.0f);
-}
-
-Transform Camera::get_inverse_projection_matrix() const {
-    return Transform(1.0f / projection_matrix.m[0][0],
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     1.0f / projection_matrix.m[1][1],
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     0.0f,
-                     -1.0f,
-                     0.0f,
-                     0.0f,
-                     1.0f / projection_matrix.m[2][3],
-                     projection_matrix.m[2][2] / projection_matrix.m[2][3]);
-}
-
-Transform Camera::get_inverse_view_projection_matrix() const {
-    return get_model_matrix() * get_inverse_projection_matrix();
-}
-
 void Camera::set_position(const vec3& position) {
     this->position = position;
 
@@ -156,27 +88,22 @@ void Camera::set_position(const vec3& position) {
 void Camera::look_around(float pitch_offset, float yaw_offset) {
     static const float MAX_TILT_ANGLE = radians(80.0f);
 
-    pitch = std::clamp(pitch - sensitivity * radians(pitch_offset), -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
-    yaw += sensitivity * radians(yaw_offset);
+    pitch = std::clamp(pitch - sensitivity * pitch_offset, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
+    yaw += sensitivity * yaw_offset;
 
     update_vectors_and_view_matrix();
 }
 
 void Camera::move_around(MovementDirection movement_direction, float delta) {
-    Vector dir;
     switch(movement_direction) {
-        case MovementDirection::FORWARD:  position += movement_speed * delta * direction; break;
-        case MovementDirection::BACKWARD: position -= movement_speed * delta * direction; break;
-        case MovementDirection::LEFT:     position -= movement_speed * delta * right; break;
-        case MovementDirection::RIGHT:    position += movement_speed * delta * right; break;
-        case MovementDirection::UPWARD:   position += movement_speed * delta * WORLD_UP; break;
-        case MovementDirection::DOWNWARD: position -= movement_speed * delta * WORLD_UP; break;
+        case MovementDirection::FORWARD:  set_position(position + movement_speed * delta * direction); break;
+        case MovementDirection::BACKWARD: set_position(position - movement_speed * delta * direction); break;
+        case MovementDirection::LEFT:     set_position(position - movement_speed * delta * right); break;
+        case MovementDirection::RIGHT:    set_position(position + movement_speed * delta * right); break;
+        case MovementDirection::UPWARD:   set_position(position + movement_speed * delta * WORLD_UP); break;
+        case MovementDirection::DOWNWARD: set_position(position - movement_speed * delta * WORLD_UP); break;
         default:                          break;
     }
-
-    view_matrix.m[0][3] = dot(position, right);
-    view_matrix.m[1][3] = dot(position, up);
-    view_matrix.m[2][3] = -dot(position, direction);
 }
 
 void Camera::update_projection_matrix() {
