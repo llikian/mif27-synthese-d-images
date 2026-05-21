@@ -12,6 +12,9 @@
 #include "constants.hpp"
 #include "draw.h"
 #include "glcore.h"
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_sdl2.h"
 #include "least_squares.hpp"
 #include "mesh_io.h"
 #include "Ray.hpp"
@@ -21,8 +24,72 @@
 
 #define TEX_SIZE 1024ull
 
+void clear_draw_texture(vec3* image, unsigned int texture, const vec3& clear_color) {
+    for(std::size_t i = 0; i < TEX_SIZE * TEX_SIZE; ++i) { image[i] = clear_color; }
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
+    glGenerateMipmap(GL_TEXTURE_2D);
+}
+
 float edge(vec2 a, vec2 b, vec2 p) {
     return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
+
+void draw_triangle(vec3* image, unsigned int texture, const vec3& draw_color, vec2 A, vec2 B, vec2 C) {
+    A.x *= TEX_SIZE;
+    A.y *= TEX_SIZE;
+    B.x *= TEX_SIZE;
+    B.y *= TEX_SIZE;
+    C.x *= TEX_SIZE;
+    C.y *= TEX_SIZE;
+
+    // Triangle
+    std::size_t min_x = std::min({ A.x, B.x, C.x });
+    std::size_t max_x = std::max({ A.x, B.x, C.x });
+    std::size_t min_y = std::min({ A.y, B.y, C.y });
+    std::size_t max_y = std::max({ A.y, B.y, C.y });
+
+    for(std::size_t y = min_y; y <= max_y; ++y) {
+        for(std::size_t x = min_x; x <= max_x; ++x) {
+            vec2 p(x + 0.5f, y + 0.5f);
+
+            float w0 = edge(B, C, p);
+            float w1 = edge(C, A, p);
+            float w2 = edge(A, B, p);
+
+            if(w0 >= 0 && w1 >= 0 && w2 >= 0) { image[y * TEX_SIZE + x] = draw_color; }
+        }
+    }
+
+    // Update texture data
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
+    glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+void draw_circle(vec3* image, unsigned int texture, const vec3& draw_color, vec2 center, float radius) {
+    center.x *= TEX_SIZE;
+    center.y *= TEX_SIZE;
+
+    // Triangle
+    std::size_t min_x = std::max(0.0f, center.x - radius);
+    std::size_t max_x = std::min(static_cast<float>(TEX_SIZE - 1), center.x + radius);
+    std::size_t min_y = std::max(0.0f, center.y - radius);
+    std::size_t max_y = std::min(static_cast<float>(TEX_SIZE - 1), center.y + radius);
+
+    for(std::size_t y = min_y; y <= max_y; ++y) {
+        for(std::size_t x = min_x; x <= max_x; ++x) {
+            float dx = x + 0.5f - center.x;
+            float dy = y + 0.5f - center.y;
+
+            if(dx * dx + dy * dy <= radius * radius) { image[y * TEX_SIZE + x] = draw_color; }
+        }
+    }
+
+    // Update texture data
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
+    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 int main() {
@@ -32,6 +99,22 @@ int main() {
 
         Window window = create_window(width, height);
         Context context = create_context(window);
+
+        // IMGUI
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        (void) io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
+
+        // Setup Dear ImGui style
+        ImGui::StyleColorsDark();
+        // ImGui::StyleColorsLight();
+
+        // Setup Platform/Renderer backends
+        ImGui_ImplSDL2_InitForOpenGL(window, context);
+        ImGui_ImplOpenGL3_Init("#version 130");
 
         Camera camera(vec3(0.0f, -2.0f, -10.0f), PI_F / 4.0f, static_cast<float>(width) / height, 0.1f, 1000.0f);
 
@@ -44,48 +127,19 @@ int main() {
         // unsigned int texture = read_texture(0, "data/assets/tomato.png");
         unsigned int checker_texture = read_texture(0, "data/assets/blender_checker.png");
 
+        vec3 draw_color_left = vec3(1.0f, 0.0f, 0.0f);
+        vec3 draw_color_right = vec3(1.0f, 1.0f, 1.0f);
+        vec3 draw_color = draw_color_left;
+        vec3 clear_color = draw_color_right;
+        float draw_radius = 5.0f;
+
         vec3* image = new vec3[TEX_SIZE * TEX_SIZE];
-        for(std::size_t i = 0; i < TEX_SIZE * TEX_SIZE; ++i) { image[i] = vec3(1.0f, 1.0f, 1.0f); }
         unsigned int texture = 0;
         glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        const auto draw_triangle = [texture, image](vec2 A, vec2 B, vec2 C) {
-            A.x *= TEX_SIZE;
-            A.y *= TEX_SIZE;
-            B.x *= TEX_SIZE;
-            B.y *= TEX_SIZE;
-            C.x *= TEX_SIZE;
-            C.y *= TEX_SIZE;
-
-            // Triangle
-            std::size_t min_x = std::min({ A.x, B.x, C.x });
-            std::size_t max_x = std::max({ A.x, B.x, C.x });
-            std::size_t min_y = std::min({ A.y, B.y, C.y });
-            std::size_t max_y = std::max({ A.y, B.y, C.y });
-
-            for(std::size_t y = min_y; y <= max_y; ++y) {
-                for(std::size_t x = min_x; x <= max_x; ++x) {
-                    vec2 p(x + 0.5f, y + 0.5f);
-
-                    float w0 = edge(B, C, p);
-                    float w1 = edge(C, A, p);
-                    float w2 = edge(A, B, p);
-
-                    if(w0 >= 0 && w1 >= 0 && w2 >= 0) { image[y * TEX_SIZE + x] = vec3(1.0f, 0.0f, 0.0f); }
-                }
-            }
-
-            // Update texture data
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        };
+        clear_draw_texture(image, texture, clear_color);
 
         default_texture(0, texture);
-        default_texture(0, checker_texture);
+        // default_texture(0, checker_texture);
 
         // etat openGL de base / par defaut
         glViewport(0, 0, width, height);
@@ -101,17 +155,18 @@ int main() {
 
         std::vector<Point> tutte_uvs = tutte_uv_unwrapping(data);
         unsigned int vao_tutte = create_buffers(data.positions, data.indices, tutte_uvs, data.normals);
-        unsigned int vao_tutte_as_tex = create_buffers(tutte_uvs, data.indices);
+        unsigned int vao_tutte_as_tex = create_buffers(tutte_uvs, data.indices, tutte_uvs);
 
         std::vector<Point> least_squares_uvs = least_squares_uv_unwrapping(data);
         unsigned int vao_least_squares = create_buffers(data.positions, data.indices, least_squares_uvs, data.normals);
-        unsigned int vao_least_squares_as_tex = create_buffers(least_squares_uvs, data.indices);
+        unsigned int vao_least_squares_as_tex = create_buffers(least_squares_uvs, data.indices, least_squares_uvs);
 
         const SDL_Keycode KEYS[] {
             SDLK_z, SDLK_q, SDLK_s, SDLK_d, SDLK_SPACE, SDLK_c, SDLK_LEFT, SDLK_RIGHT, SDLK_DOWN, SDLK_UP,
         };
         std::unordered_map<SDL_Keycode, bool> repeatable_keys;
         for(SDL_Keycode key : KEYS) { repeatable_keys[key] = false; }
+        bool is_mouse_button_down = false;
 
         bool wireframe = false;
         int view_number = 3;
@@ -129,6 +184,8 @@ int main() {
 
             SDL_Event event;
             while(SDL_PollEvent(&event) != 0) {
+                ImGui_ImplSDL2_ProcessEvent(&event);
+
                 switch(event.type) {
                     case SDL_QUIT: should_stop = true; break;
                     case SDL_KEYDOWN:
@@ -161,47 +218,23 @@ int main() {
                         break;
                     case SDL_MOUSEBUTTONDOWN:
                         if(event.button.button == SDL_BUTTON_LEFT) {
-                            vec2 mouse_pos(event.button.x, event.button.y);
-                            vec2 window_res(width, height);
-
-                            vec2 normalized_mouse_pos(-1.0f + 2.0f * mouse_pos.x / window_res.x,
-                                                      1.0f - 2.0f * mouse_pos.y / window_res.y);
-
-                            // Transform vp_inverse = camera.get_inverse_view_projection_matrix();
-                            Transform vp_inverse = (proj * view).inverse();
-
-                            Ray ray(vp_inverse(vec4(normalized_mouse_pos, -1.0f, 1.0f)),
-                                    vp_inverse(vec4(normalized_mouse_pos, 1.0f, 1.0f)));
-
-                            bool intersected = false;
-                            std::size_t triangle_id = 0;
-                            float distance = 0.0f;
-
-                            for(std::size_t i = 0; i + 2 < data.indices.size(); i += 3) {
-                                float dist = ray.intersect_triangle(model(data.positions[data.indices[i]]),
-                                                                    model(data.positions[data.indices[i + 1]]),
-                                                                    model(data.positions[data.indices[i + 2]]));
-
-                                if(dist > 0.0f) {
-                                    if(dist < distance || !intersected) {
-                                        distance = dist;
-                                        triangle_id = i;
-                                    }
-                                    intersected = true;
-                                }
-                            }
-
-                            if(intersected) {
-                                const std::vector<Point>& uvs = least_squares_uvs;
-                                draw_triangle(
-                                    vec2(uvs[data.indices[triangle_id]].x, uvs[data.indices[triangle_id]].y),
-                                    vec2(uvs[data.indices[triangle_id + 1]].x, uvs[data.indices[triangle_id + 1]].y),
-                                    vec2(uvs[data.indices[triangle_id + 2]].x, uvs[data.indices[triangle_id + 2]].y));
-                            }
-
-                            std::cout << '\n';
+                            is_mouse_button_down = true;
+                            draw_color = draw_color_left;
+                        } else if(event.button.button == SDL_BUTTON_RIGHT) {
+                            is_mouse_button_down = true;
+                            draw_color = draw_color_right;
                         }
                         break;
+                    case SDL_MOUSEBUTTONUP: is_mouse_button_down = false; break;
+                    case SDL_WINDOWEVENT:
+                        if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                            width = event.window.data1;
+                            height = event.window.data2;
+                            std::cout << width << '\n';
+                            camera.update_projection_matrix(static_cast<float>(width) / height);
+                        }
+                        break;
+                    default: break;
                 }
             }
 
@@ -224,6 +257,75 @@ int main() {
                 }
             }
 
+            if(is_mouse_button_down) {
+                vec2 mouse_pos(event.button.x, event.button.y);
+                vec2 window_res(width, height);
+
+                vec2 normalized_mouse_pos(-1.0f + 2.0f * mouse_pos.x / window_res.x,
+                                          1.0f - 2.0f * mouse_pos.y / window_res.y);
+
+                // Transform vp_inverse = camera.get_inverse_view_projection_matrix();
+                Transform vp_inverse = (proj * view).inverse();
+
+                Ray ray(vp_inverse(vec4(normalized_mouse_pos, -1.0f, 1.0f)),
+                        vp_inverse(vec4(normalized_mouse_pos, 1.0f, 1.0f)));
+
+                bool intersected = false;
+                std::size_t triangle_id = 0;
+                float distance = 0.0f;
+
+                for(std::size_t i = 0; i + 2 < data.indices.size(); i += 3) {
+                    float dist = ray.intersect_triangle(model(data.positions[data.indices[i]]),
+                                                        model(data.positions[data.indices[i + 1]]),
+                                                        model(data.positions[data.indices[i + 2]]));
+
+                    if(dist > 0.0f) {
+                        if(dist < distance || !intersected) {
+                            distance = dist;
+                            triangle_id = i;
+                        }
+                        intersected = true;
+                    }
+                }
+
+                if(intersected) {
+                    const std::vector<Point>& uvs = least_squares_uvs;
+
+                    std::size_t index0 = data.indices[triangle_id];
+                    std::size_t index1 = data.indices[triangle_id + 1];
+                    std::size_t index2 = data.indices[triangle_id + 2];
+
+                    vec2 A(uvs[index0].x, uvs[index0].y);
+                    vec2 B(uvs[index1].x, uvs[index1].y);
+                    vec2 C(uvs[index2].x, uvs[index2].y);
+
+                    vec3 barycentric_coords = ray.get_barycentric_coords_in_triangle(model(data.positions[index0]),
+                                                                                     model(data.positions[index1]),
+                                                                                     model(data.positions[index2]));
+                    vec2 P(A.x * barycentric_coords.x + B.x * barycentric_coords.y + C.x * barycentric_coords.z,
+                           A.y * barycentric_coords.x + B.y * barycentric_coords.y + C.y * barycentric_coords.z);
+
+                    // draw_triangle(image, texture, draw_color, A, B, C);
+                    draw_circle(image, texture, draw_color, P, draw_radius);
+                }
+            }
+
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplSDL2_NewFrame();
+            ImGui::NewFrame();
+
+            /* ImGui */ {
+                ImGui::Begin("Debug");
+
+                ImGui::ColorEdit3("Clear Color", &clear_color.x);
+                if(ImGui::Button("Clear Image")) { clear_draw_texture(image, texture, clear_color); }
+                ImGui::ColorEdit3("Draw Color Left", &draw_color_left.x);
+                ImGui::ColorEdit3("Draw Color Right", &draw_color_right.x);
+                ImGui::SliderFloat("Draw Radius", &draw_radius, 1.0f, 100.0f);
+
+                ImGui::End();
+            }
+
             // 0 : Suzanne with default texcoords
             // 1 : Tutte on Suzanne
             // 2 : Tutte UVs
@@ -238,10 +340,17 @@ int main() {
                 default: break;
             }
 
+            ImGui::Render();
+            glViewport(0, 0, (int) io.DisplaySize.x, (int) io.DisplaySize.y);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             SDL_GL_SwapWindow(window);
         }
 
         std::cout << "\n\n";
+
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL2_Shutdown();
+        ImGui::DestroyContext();
 
         delete[] image;
 

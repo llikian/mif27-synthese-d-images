@@ -32,6 +32,9 @@ struct Ray {
 
     float intersect_triangle(const vec3& A, const vec3& B, const vec3& C) const;
 
+    // Only use if you're sure trying is intersected, otherwise will give garbage values or crash
+    vec3 get_barycentric_coords_in_triangle(const vec3& A, const vec3& B, const vec3& C) const;
+
     vec3 origin;
     vec3 direction;
 };

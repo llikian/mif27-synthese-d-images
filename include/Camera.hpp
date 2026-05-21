@@ -131,7 +131,7 @@ public:
     /**
      * @brief Updates the projection matrix with according to the window's new aspect ratio.
      */
-    void update_projection_matrix();
+    void update_projection_matrix(float aspect_ratio);
 
     /**
      * @brief Rotates the camera to make it look towards a certain point.

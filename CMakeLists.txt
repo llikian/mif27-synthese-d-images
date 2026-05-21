@@ -23,6 +23,14 @@ set(LIBRARY_SOURCES
     lib/gkit/uniforms.cpp
     lib/gkit/vec.cpp
     lib/gkit/window.cpp
+
+    lib/imgui/imgui.cpp
+    lib/imgui/imgui_draw.cpp
+    lib/imgui/imgui_tables.cpp
+    lib/imgui/imgui_widgets.cpp
+    lib/imgui/backends/imgui_impl_sdl2.cpp
+    lib/imgui/backends/imgui_impl_opengl3.cpp
+    lib/imgui/misc/cpp/imgui_stdlib.cpp
 )
 
 set(SOURCES
@@ -43,6 +51,9 @@ set(INCLUDES
 
     # Libraries
     lib/gkit
+    lib/imgui
+    lib/imgui/backends
+    lib/imgui/misc/cpp
 )
 
 set(LIBRARIES

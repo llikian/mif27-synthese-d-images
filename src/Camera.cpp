@@ -174,9 +174,8 @@ void Camera::move_around(MovementDirection movement_direction, float delta) {
     }
 }
 
-void Camera::update_projection_matrix() {
-    // TODO: fix this ig
-    // projection_matrix.m[0][0] = 1.0f / (Window::get_aspect_ratio() * std::tan(0.5f * fov));
+void Camera::update_projection_matrix(float aspect_ratio) {
+    projection_matrix.m[0][0] = 1.0f / (aspect_ratio * std::tan(0.5f * fov));
 }
 
 void Camera::look_at_point(const vec3& target) {
