@@ -175,6 +175,8 @@ struct vec3 {
 };
 
 vec3 operator*(float scalar, const vec3& v);
+vec3 operator*(const vec3& v, float scalar);
+vec3 operator/(const vec3& v, float scalar);
 
 vec3 operator-(const vec3& u, const vec3& v);
 vec3 operator+(const vec3& u, const vec3& v);

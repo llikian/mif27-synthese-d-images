@@ -120,6 +120,15 @@ vec3 operator*(float scalar, const vec3& v) {
     return vec3(scalar * v.x, scalar * v.y, scalar * v.z);
 }
 
+vec3 operator*(const vec3& v, float scalar) {
+    return vec3(v.x * scalar, v.y * scalar, v.y * scalar);
+}
+
+vec3 operator/(const vec3& v, float scalar) {
+    float inv = 1.0f / scalar;
+    return vec3(v.x * inv, v.y * inv, v.y * inv);
+}
+
 vec3 operator-(const vec3& u, const vec3& v) {
     return vec3(u.x - v.x, u.y - v.y, u.z - v.z);
 }

@@ -28,6 +28,7 @@ set(LIBRARY_SOURCES
 set(SOURCES
     # Classes
     src/Camera.cpp
+    src/Ray.cpp
 
     # Other Sources
     src/tutte.cpp

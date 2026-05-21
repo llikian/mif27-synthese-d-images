@@ -77,6 +77,74 @@ const Transform& Camera::get_projection_matrix() const {
     return projection_matrix;
 }
 
+Transform Camera::get_view_projection_matrix() const {
+    return Transform(projection_matrix.m[0][0] * view_matrix.m[0][0],
+                     projection_matrix.m[0][0] * view_matrix.m[0][1],
+                     projection_matrix.m[0][0] * view_matrix.m[0][2],
+                     projection_matrix.m[0][0] * view_matrix.m[0][3],
+
+                     projection_matrix.m[1][1] * view_matrix.m[1][0],
+                     projection_matrix.m[1][1] * view_matrix.m[1][1],
+                     projection_matrix.m[1][1] * view_matrix.m[1][2],
+                     projection_matrix.m[1][1] * view_matrix.m[1][3],
+
+                     projection_matrix.m[2][2] * view_matrix.m[2][0],
+                     projection_matrix.m[2][2] * view_matrix.m[2][1],
+                     projection_matrix.m[2][2] * view_matrix.m[2][2],
+                     projection_matrix.m[2][2] * view_matrix.m[2][3] + projection_matrix.m[2][3],
+
+                     -view_matrix.m[2][0],
+                     -view_matrix.m[2][1],
+                     -view_matrix.m[2][2],
+                     -view_matrix.m[2][3]);
+}
+
+Transform Camera::get_rotation_matrix() const {
+    return Transform(right.x, up.x, -direction.x, right.y, up.y, -direction.y, right.z, up.z, -direction.z);
+}
+
+Transform Camera::get_model_matrix() const {
+    return Transform(right.x,
+                     up.x,
+                     -direction.x,
+                     position.x,
+                     right.y,
+                     up.y,
+                     -direction.y,
+                     position.y,
+                     right.z,
+                     up.z,
+                     -direction.z,
+                     position.z,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     1.0f);
+}
+
+Transform Camera::get_inverse_projection_matrix() const {
+    return Transform(1.0f / projection_matrix.m[0][0],
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     1.0f / projection_matrix.m[1][1],
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     -1.0f,
+                     0.0f,
+                     0.0f,
+                     1.0f / projection_matrix.m[2][3],
+                     projection_matrix.m[2][2] / projection_matrix.m[2][3]);
+}
+
+Transform Camera::get_inverse_view_projection_matrix() const {
+    return get_model_matrix() * get_inverse_projection_matrix();
+}
+
 void Camera::set_position(const vec3& position) {
     this->position = position;
 
