@@ -12,9 +12,11 @@
 #include "constants.hpp"
 #include "draw.h"
 #include "glcore.h"
+#include "image_draw.hpp"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
+#include "imgui_internal.h"
 #include "least_squares.hpp"
 #include "mesh_io.h"
 #include "Ray.hpp"
@@ -22,74 +24,10 @@
 #include "tutte.hpp"
 #include "window.h"
 
-#define TEX_SIZE 1024ull
-
-void clear_draw_texture(vec3* image, unsigned int texture, const vec3& clear_color) {
-    for(std::size_t i = 0; i < TEX_SIZE * TEX_SIZE; ++i) { image[i] = clear_color; }
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
-    glGenerateMipmap(GL_TEXTURE_2D);
-}
-
-float edge(vec2 a, vec2 b, vec2 p) {
-    return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-}
-
-void draw_triangle(vec3* image, unsigned int texture, const vec3& draw_color, vec2 A, vec2 B, vec2 C) {
-    A.x *= TEX_SIZE;
-    A.y *= TEX_SIZE;
-    B.x *= TEX_SIZE;
-    B.y *= TEX_SIZE;
-    C.x *= TEX_SIZE;
-    C.y *= TEX_SIZE;
-
-    // Triangle
-    std::size_t min_x = std::min({ A.x, B.x, C.x });
-    std::size_t max_x = std::max({ A.x, B.x, C.x });
-    std::size_t min_y = std::min({ A.y, B.y, C.y });
-    std::size_t max_y = std::max({ A.y, B.y, C.y });
-
-    for(std::size_t y = min_y; y <= max_y; ++y) {
-        for(std::size_t x = min_x; x <= max_x; ++x) {
-            vec2 p(x + 0.5f, y + 0.5f);
-
-            float w0 = edge(B, C, p);
-            float w1 = edge(C, A, p);
-            float w2 = edge(A, B, p);
-
-            if(w0 >= 0 && w1 >= 0 && w2 >= 0) { image[y * TEX_SIZE + x] = draw_color; }
-        }
-    }
-
-    // Update texture data
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
-    glGenerateMipmap(GL_TEXTURE_2D);
-}
-
-void draw_circle(vec3* image, unsigned int texture, const vec3& draw_color, vec2 center, float radius) {
-    center.x *= TEX_SIZE;
-    center.y *= TEX_SIZE;
-
-    // Triangle
-    std::size_t min_x = std::max(0.0f, center.x - radius);
-    std::size_t max_x = std::min(static_cast<float>(TEX_SIZE - 1), center.x + radius);
-    std::size_t min_y = std::max(0.0f, center.y - radius);
-    std::size_t max_y = std::min(static_cast<float>(TEX_SIZE - 1), center.y + radius);
-
-    for(std::size_t y = min_y; y <= max_y; ++y) {
-        for(std::size_t x = min_x; x <= max_x; ++x) {
-            float dx = x + 0.5f - center.x;
-            float dy = y + 0.5f - center.y;
-
-            if(dx * dx + dy * dy <= radius * radius) { image[y * TEX_SIZE + x] = draw_color; }
-        }
-    }
-
-    // Update texture data
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_FLOAT, image);
-    glGenerateMipmap(GL_TEXTURE_2D);
+static bool is_mouse_hovering_imgui() {
+    ImGuiContext* imgui_context = ImGui::GetCurrentContext();
+    return imgui_context->HoveredWindow != nullptr &&
+           (imgui_context->HoveredWindow->Flags & ImGuiWindowFlags_NoMouseInputs) == 0;
 }
 
 int main() {
@@ -133,7 +71,13 @@ int main() {
         vec3 clear_color = draw_color_right;
         float draw_radius = 5.0f;
 
-        vec3* image = new vec3[TEX_SIZE * TEX_SIZE];
+        // TODO
+
+        vec3* image_tutte = new vec3[TEX_SIZE * TEX_SIZE];
+        vec3* image_lscm = new vec3[TEX_SIZE * TEX_SIZE];
+
+        // TODO
+
         unsigned int texture = 0;
         glGenTextures(1, &texture);
         clear_draw_texture(image, texture, clear_color);
@@ -230,7 +174,6 @@ int main() {
                         if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
                             width = event.window.data1;
                             height = event.window.data2;
-                            std::cout << width << '\n';
                             camera.update_projection_matrix(static_cast<float>(width) / height);
                         }
                         break;
@@ -264,7 +207,6 @@ int main() {
                 vec2 normalized_mouse_pos(-1.0f + 2.0f * mouse_pos.x / window_res.x,
                                           1.0f - 2.0f * mouse_pos.y / window_res.y);
 
-                // Transform vp_inverse = camera.get_inverse_view_projection_matrix();
                 Transform vp_inverse = (proj * view).inverse();
 
                 Ray ray(vp_inverse(vec4(normalized_mouse_pos, -1.0f, 1.0f)),
@@ -288,7 +230,7 @@ int main() {
                     }
                 }
 
-                if(intersected) {
+                if(intersected && !is_mouse_hovering_imgui()) {
                     const std::vector<Point>& uvs = least_squares_uvs;
 
                     std::size_t index0 = data.indices[triangle_id];

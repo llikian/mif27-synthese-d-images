@@ -117,5 +117,17 @@ std::vector<Point> tutte_uv_unwrapping(const MeshIOData& data) {
         tex_coords[vertex_index] = Point(solution_u[row_index], solution_v[row_index], 0.0f);
     }
 
+    float lowest_uv = std::numeric_limits<float>::max();
+    float highest_uv = std::numeric_limits<float>::lowest();
+    for(auto [u, v, z] : tex_coords) {
+        lowest_uv = std::min({ lowest_uv, u, v });
+        highest_uv = std::max({ highest_uv, u, v });
+    }
+
+    for(auto& [u, v, z] : tex_coords) {
+        u = (u - lowest_uv) / (highest_uv - lowest_uv);
+        v = (v - lowest_uv) / (highest_uv - lowest_uv);
+    }
+
     return tex_coords;
 }

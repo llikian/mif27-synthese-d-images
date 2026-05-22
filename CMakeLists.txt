@@ -41,6 +41,7 @@ set(SOURCES
     # Other Sources
     src/tutte.cpp
     src/least_squares.cpp
+    src/image_draw.cpp
 
     # Libraries
     ${LIBRARY_SOURCES}
