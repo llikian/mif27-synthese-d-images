@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * @file  least_squares.hpp
- * @brief Declaration of least_squares
+ * @file  lscm.hpp
+ * @brief Declaration of lscm
  **************************************************************************************************/
 
 #pragma once
@@ -9,4 +9,4 @@
 #include "mesh_io.h"
 #include "vec.h"
 
-std::vector<Point> least_squares_uv_unwrapping(const MeshIOData& data);
+std::vector<Point> lscm_uv_unwrapping(const MeshIOData& data);

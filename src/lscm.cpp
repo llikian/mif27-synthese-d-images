@@ -1,14 +1,14 @@
 /***************************************************************************************************
- * @file  least_squares.cpp
- * @brief Implementation of least_squares
+ * @file  lscm.cpp
+ * @brief Implementation of lscm
  **************************************************************************************************/
 
-#include "least_squares.hpp"
+#include "lscm.hpp"
 #include <cstdint>
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCore>
 
-std::vector<Point> least_squares_uv_unwrapping(const MeshIOData& data) {
+std::vector<Point> lscm_uv_unwrapping(const MeshIOData& data) {
     std::size_t vertex_count = data.positions.size();
     std::vector<Point> tex_coords(vertex_count);
 

@@ -35,13 +35,14 @@ set(LIBRARY_SOURCES
 
 set(SOURCES
     # Classes
+    src/Application.cpp
     src/Camera.cpp
+    src/DrawImage.cpp
     src/Ray.cpp
 
     # Other Sources
+    src/lscm.cpp
     src/tutte.cpp
-    src/least_squares.cpp
-    src/image_draw.cpp
 
     # Libraries
     ${LIBRARY_SOURCES}
